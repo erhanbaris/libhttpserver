@@ -28,6 +28,7 @@ namespace
 
 bool staticFolderMiddleware(HttpClient* client)
 {
+    std::cout << "staticFolderMiddleware " << client->Path << std::endl;
     return true;
 }
 
@@ -107,8 +108,27 @@ struct HttpServerPimpl
     void messageReceived(std::string const& message, HttpClient* client)
     {
         auto parsedSize = http_parser_execute((http_parser*)client->Parser, parser_settings, message.c_str(), message.size());
+
         if (parsedSize == message.size())
         {
+            struct http_parser_url u;
+            char const * url = client->Headers["Host"].c_str();
+            int result = http_parser_parse_url(url, strlen(url), 1, &u);
+
+            if (!result)
+            {
+                if ((u.field_set & (1 << UF_HOST))) {
+                    const char * data = url + u.field_data[UF_HOST].off;
+                    client->Host = std::string(data, u.field_data[UF_HOST].len);
+                }
+
+                if ((u.field_set & (1 << UF_PORT))) {
+                    const char * data = url + u.field_data[UF_PORT].off;
+                    client->Port = std::string(data, u.field_data[UF_PORT].len);
+                }
+            }
+
+            http_parser_execute((http_parser*)client->Parser, parser_settings, client->Headers["Host"].c_str(), client->Headers["Host"].size());
             parseRequest(client);
         }
     }
@@ -206,21 +226,6 @@ struct HttpServerPimpl
             if ((u.field_set & (1 << UF_FRAGMENT))) {
                 const char * data = url + u.field_data[UF_FRAGMENT].off;
                 client->Fragment = std::string(data, u.field_data[UF_FRAGMENT].len);
-            }
-
-            if ((u.field_set & (1 << UF_HOST))) {
-                const char * data = url + u.field_data[UF_HOST].off;
-                client->Host = std::string(data, u.field_data[UF_HOST].len);
-            }
-
-            if ((u.field_set & (1 << UF_MAX))) {
-                const char * data = url + u.field_data[UF_MAX].off;
-                client->Max = std::string(data, u.field_data[UF_MAX].len);
-            }
-
-            if ((u.field_set & (1 << UF_PORT))) {
-                const char * data = url + u.field_data[UF_PORT].off;
-                client->Port = std::string(data, u.field_data[UF_PORT].len);
             }
 
             if ((u.field_set & (1 << UF_SCHEMA))) {
