@@ -8,37 +8,53 @@
 #include <deque>
 
 #include <uv.h>
-#include <TcpClientUv.h>
 #include <Config.h>
+#include <Response.h>
 
 class HttpServer;
-class TcpClientUv;
+class HttpClientPimpl;
 
-class HttpClient : public TcpClientUv
+class HttpClient
 {
-public:
-    void * Handle; // uv_tcp_t
-    void * Parser; // http_parser
-    void * Async; // uv_async_t
+    public:
+        void * Parser; // http_parser
 
-    TcpClientUv* TcpClient;
-    void * Data2;
+        typedef std::function<void(std::string const &, HttpClient *)> MessageCallback;
+        typedef std::function<void(HttpClient *)> ConnectCallback;
 
-    std::unordered_map<std::string, std::string> Headers;
-    std::unordered_map<std::string, std::string>::const_iterator HeadersEnd;
+        void SetOnMessage(MessageCallback);
 
-    std::string LastHeaderItem;
-    std::string Url;
-    std::string RequestBuffer;
-    std::stringstream ResponseBuffer;
-    HttpServer* ServerPimpl;
-    HttpRequestType Type;
-    std::string ContentType;
+        std::string GetRemoteAddress();
+        size_t GetRemotePort();
 
-    std::unordered_map<std::string, AnyType> ViewMap;
-    std::unordered_map<std::string, AnyType> Session;
+        std::unordered_map<std::string, std::string> Headers;
+        std::unordered_map<std::string, std::string>::const_iterator HeadersEnd;
 
-    HttpClient( /*std::unordered_map<std::string, AnyType>& pSession*/ );
-    virtual ~HttpClient();
-    virtual void Send();
+        std::string LastHeaderItem;
+
+        std::string Schema;
+        std::string Host;
+        std::string Port;
+        std::string Path;
+        std::string Query;
+        std::string Fragment;
+        std::string UserInfo;
+        std::string Max;
+
+        std::string RequestBuffer;
+        std::stringstream ResponseBuffer;
+
+        HttpResponseType Type;
+        std::string ContentType;
+
+        std::unordered_map<std::string, AnyType> ViewMap;
+        std::unordered_map<std::string, AnyType> Session;
+
+        HttpClient(void*);
+
+        virtual ~HttpClient();
+        virtual void Send();
+
+    private:
+        HttpClientPimpl* pimpl;
 };

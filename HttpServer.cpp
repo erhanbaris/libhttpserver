@@ -17,7 +17,6 @@
 #include <HttpClient.h>
 #include <HttpServer.h>
 #include <Config.h>
-#include <TcpClientUv.h>
 #include <Controller.h>
 #include <InlineController.h>
 
@@ -29,7 +28,6 @@ namespace
 
 bool staticFolderMiddleware(HttpClient* client)
 {
-    std::cout << "staticFolderMiddleware " << client->Url << std::endl;
     return true;
 }
 
@@ -45,7 +43,7 @@ struct HttpServerPimpl
     uv_timer_t elapsedTimer;
     HttpServer& httpServer;
     size_t port;
-    std::vector<TcpClientUv*> clients;
+    std::vector<HttpClient*> clients;
     std::unordered_map<std::string, std::shared_ptr<Controller>> controllers;
     std::unordered_map<std::string, std::shared_ptr<Controller>>::const_iterator controllersEnd;
 
@@ -79,15 +77,10 @@ struct HttpServerPimpl
     static void onConnect(uv_stream_t* serverHandle, int status) {
         HttpServerPimpl* pimpl = (HttpServerPimpl*)serverHandle->data;
 
-        TcpClientUv* tcpClient = new TcpClientUv(serverHandle);
-        tcpClient->SetOnMessage([pimpl](std::string const& message, TcpClientUv* client)
+        HttpClient* tcpClient = new HttpClient(serverHandle);
+        tcpClient->SetOnMessage([pimpl](std::string const& message, HttpClient* client)
         {
             pimpl->messageReceived(message, client);
-        });
-
-        tcpClient->SetOnDisconnect([](TcpClientUv* client)
-        {
-
         });
 
         pimpl->clientConnected(tcpClient);
@@ -111,19 +104,19 @@ struct HttpServerPimpl
             delete parser_settings;
     }
 
-    void messageReceived(std::string const& message, TcpClientUv* client)
+    void messageReceived(std::string const& message, HttpClient* client)
     {
-        auto parsedSize = http_parser_execute((http_parser*)((HttpClient*)client->Data1)->Parser, parser_settings, message.c_str(), message.size());
+        auto parsedSize = http_parser_execute((http_parser*)client->Parser, parser_settings, message.c_str(), message.size());
         if (parsedSize == message.size())
         {
-            parseRequest((HttpClient*)client->Data1);
+            parseRequest(client);
         }
     }
 
     void parseRequest(HttpClient* client)
     {
-        std::unordered_map<std::string, HttpServer::RouteItem>::const_iterator routeCallback = routes.find(client->Url);
-        std::unordered_map<std::string, std::shared_ptr<Controller>>::const_iterator callback = controllers.find(client->Url);
+        std::unordered_map<std::string, HttpServer::RouteItem>::const_iterator routeCallback = routes.find(client->Path);
+        std::unordered_map<std::string, std::shared_ptr<Controller>>::const_iterator callback = controllers.find(client->Path);
         if (routeCallback != routesEnd)
         {
             Response* response = routeCallback->second(client);
@@ -131,22 +124,23 @@ struct HttpServerPimpl
             if (response != nullptr)
             {
                 bool continueToRequest = true;
-                for(auto it = preMiddlewareItems.begin(); it != preMiddlewareItemsEnd && !continueToRequest; ++it)
+                for(auto it = preMiddlewareItems.begin(); it != preMiddlewareItemsEnd && continueToRequest; ++it)
                     continueToRequest = (*it)(client);
 
                 if (continueToRequest)
                 {
                     client->ResponseBuffer << response->Render();
                     client->ContentType = response->GetContentType();
-                    client->Type = response->GetRequestType();
+                    client->Type = response->GetResponseType();
 
-                    for(auto it = preMiddlewareItems.begin(); it != preMiddlewareItemsEnd && !continueToRequest; ++it)
+                    for(auto it = preMiddlewareItems.begin(); it != preMiddlewareItemsEnd && continueToRequest; ++it)
                         continueToRequest = (*it)(client);
                 }
 
                 delete response; response = nullptr;
             }
-        } else if (callback != controllersEnd)
+        }
+        else if (callback != controllersEnd)
         {
             Controller* controller = callback->second.get();
             Controller* newController = controller->Create();
@@ -168,27 +162,20 @@ struct HttpServerPimpl
         client->Send();
     }
 
-    void clientConnected(TcpClientUv* client)
+    void clientConnected(HttpClient* client)
     {
-        HttpClient* httpClient = new HttpClient;
         http_parser* httpParser = new http_parser;
-
-        httpClient->TcpClient = client;
-        httpClient->Parser = httpParser;
-        httpParser->data = httpClient;
-        client->Data1 = httpClient;
-
+        httpParser->data = client;
+        client->Parser = httpParser;
         http_parser_init(httpParser, HTTP_REQUEST);
     }
 
-    void clientDisconnected(TcpClientUv* client)
+    void clientDisconnected(HttpClient* client)
     {
-        HttpClient * httpClient = (HttpClient*)client->Data1;
-
-        delete (http_parser*)httpClient->Parser;
+        delete (http_parser*)client->Parser;
         delete client;
 
-        clientDisconnectedCallback(httpClient);
+        clientDisconnectedCallback(client);
     }
 
 
@@ -208,21 +195,63 @@ struct HttpServerPimpl
         else {
             if ((u.field_set & (1 << UF_PATH))) {
                 const char * data = url + u.field_data[UF_PATH].off;
-                client->Url = std::string(data, u.field_data[UF_PATH].len);
+                client->Path = std::string(data, u.field_data[UF_PATH].len);
+            }
+
+            if ((u.field_set & (1 << UF_QUERY))) {
+                const char * data = url + u.field_data[UF_QUERY].off;
+                client->Query = std::string(data, u.field_data[UF_QUERY].len);
+            }
+
+            if ((u.field_set & (1 << UF_FRAGMENT))) {
+                const char * data = url + u.field_data[UF_FRAGMENT].off;
+                client->Fragment = std::string(data, u.field_data[UF_FRAGMENT].len);
+            }
+
+            if ((u.field_set & (1 << UF_HOST))) {
+                const char * data = url + u.field_data[UF_HOST].off;
+                client->Host = std::string(data, u.field_data[UF_HOST].len);
+            }
+
+            if ((u.field_set & (1 << UF_MAX))) {
+                const char * data = url + u.field_data[UF_MAX].off;
+                client->Max = std::string(data, u.field_data[UF_MAX].len);
+            }
+
+            if ((u.field_set & (1 << UF_PORT))) {
+                const char * data = url + u.field_data[UF_PORT].off;
+                client->Port = std::string(data, u.field_data[UF_PORT].len);
+            }
+
+            if ((u.field_set & (1 << UF_SCHEMA))) {
+                const char * data = url + u.field_data[UF_SCHEMA].off;
+                client->Schema = std::string(data, u.field_data[UF_SCHEMA].len);
+            }
+
+            if ((u.field_set & (1 << UF_USERINFO))) {
+                const char * data = url + u.field_data[UF_USERINFO].off;
+                client->UserInfo = std::string(data, u.field_data[UF_USERINFO].len);
             }
         }
         return 0;
     }
 
-    static int on_header_field(http_parser* /*parser*/, const char* at, size_t length) {
+    static int on_header_field(http_parser* parser, const char* at, size_t length) {
+        HttpClient* client = (HttpClient*)parser->data;
+        client->LastHeaderItem = std::string(at, length);
         return 0;
     }
 
-    static int on_header_value(http_parser* /*parser*/, const char* at, size_t length) {
+    static int on_header_value(http_parser* parser, const char* at, size_t length) {
+        HttpClient* client = (HttpClient*)parser->data;
+        client->Headers[client->LastHeaderItem] = std::string(at, length);
         return 0;
     }
 
-    static int on_headers_complete(http_parser* /*parser*/) {
+    static int on_headers_complete(http_parser* parser) {
+        HttpClient* client = (HttpClient*)parser->data;
+        client->HeadersEnd = client->Headers.cend();
+        client->LastHeaderItem.clear();
         return 0;
     }
 
@@ -248,18 +277,6 @@ HttpServer::HttpServer()
     parser_settings->on_header_value = pimpl->on_header_value;
     parser_settings->on_headers_complete = pimpl->on_headers_complete;
     parser_settings->on_body = pimpl->on_body;
-
-    /*HttpServerPimpl* tmpPimpl = pimpl;;
-    SetClientConnected([tmpPimpl](TcpClientUv* client)
-    {
-        tmpPimpl->clientConnected(client);
-    });
-
-    SetClientDisconnected([tmpPimpl](TcpClientUv* client)
-    {
-        tmpPimpl->clientDisconnected(client);
-    });*/
-
 
     AddController(std::make_shared<InlineController>());
 }

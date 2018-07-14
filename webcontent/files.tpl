@@ -1,1 +1,2 @@
-{{#files}}<b>{{name}}</b><br>{{/files}}
+{{#files}}<b>{{name}}</b><br>
+{{/files}}

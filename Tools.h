@@ -49,6 +49,23 @@ class ReadDirResult {
         }
 };
 
+
+static char* _strndup(char *str, int chars)
+{
+    char *buffer;
+    int n;
+
+    buffer = (char *)malloc(chars + 1);
+    if (buffer)
+    {
+        for (n = 0; ((n < chars) && (str[n] != 0)); ++n) buffer[n] = str[n];
+        buffer[n] = 0;
+    }
+
+    return buffer;
+}
+
+
 static void read_directory(const std::string& name, std::vector<ReadDirResult>& v)
 {
     DIR* dirp = opendir(name.c_str());

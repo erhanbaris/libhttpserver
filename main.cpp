@@ -8,9 +8,6 @@
 #include <stdlib.h>
 #include <ctype.h>
 
-#include <TcpServerUv.h>
-#include <TcpClientUv.h>
-
 #include <HttpServer.h>
 #include <Controller.h>
 #include <Tools.h>
@@ -39,7 +36,7 @@ ADD_ROUTE(test2, test2, RequestType::GET, server, (HttpClient* client){
 
 bool testMiddleware(HttpClient* client)
 {
-    std::cout << "testMiddleware " << client->Url << std::endl;
+    std::cout << "testMiddleware " << client->Path << std::endl;
     return true;
 }
 

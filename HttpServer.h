@@ -10,6 +10,7 @@
 #include <Config.h>
 #include <Controller.h>
 #include <HttpClient.h>
+#include <Response.h>
 
 struct HttpServerPimpl;
 class HttpServer
