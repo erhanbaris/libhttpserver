@@ -31,7 +31,7 @@ public:
 	virtual void Stop();
 	virtual size_t GetPort();
 
-    virtual void AddStaticFolder(std::string const & pFolderName);
+    virtual void AddStaticFolder(std::string const & pFolderName, std::string const & virtualPath);
     virtual void SetWorkingFolder(std::string const & pFolderName);
     virtual void SetApplicationFolder(std::string const & pFolderName);
 

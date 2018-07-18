@@ -34,12 +34,6 @@ ADD_ROUTE(test2, test2, RequestType::GET, server, (HttpClient* client){
 });
 
 
-bool testMiddleware(HttpClient* client)
-{
-    std::cout << "testMiddleware " << client->Path << std::endl;
-    return true;
-}
-
 int main(int argc, char *argv[])
 {
     HTTP_PORT = 9090;
@@ -74,10 +68,9 @@ int main(int argc, char *argv[])
             return new JsonResponse("{'merhaba':'dünya'}");
     });
 
-    loop = uv_default_loop();
-
     INFO << "Http Server Port : " << HTTP_PORT << std::endl;
     //server.AddMiddleware(testMiddleware);
+    server.AddStaticFolder("/Users/erhanbaris/ClionProjects/RemoteServer/webcontent", "static");
     server.Start(HTTP_PORT);
 
     return 0;
