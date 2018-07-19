@@ -32,7 +32,7 @@ namespace
 
 bool staticFolderMiddleware(HttpClient* client)
 {
-    std::cout << "staticFolderMiddleware " << client->Path << std::endl;
+    //std::cout << "staticFolderMiddleware " << client->Path << std::endl;
     return true;
 }
 
@@ -150,12 +150,9 @@ struct HttpServerPimpl
             }
         }
 
-        void parseRequest(HttpClient* client)
+        bool checkStaticFiles(HttpClient* client)
         {
-            std::unordered_map<std::string, HttpServer::RouteItem>::const_iterator routeCallback = routes.find(client->Path);
-            std::unordered_map<std::string, std::shared_ptr<Controller>>::const_iterator callback = controllers.find(client->Path);
             std::unordered_map<std::string, std::string>::const_iterator staticFileStatus = staticFiles.find(client->Path);
-
             if (staticFileStatus != staticFilesEnd)
             {
                 std::fstream myfile;
@@ -192,9 +189,17 @@ struct HttpServerPimpl
                     client->ResponseBuffer << "File Not Found";
                     client->Type = HttpResponseType::_404;
                 }
-                //client->ContentType = response->GetContentType();
+
+                return true;
             }
-            else if (routeCallback != routesEnd)
+
+            return false;
+        }
+
+        bool checkRoutes(HttpClient* client)
+        {
+            std::unordered_map<std::string, HttpServer::RouteItem>::const_iterator routeCallback = routes.find(client->Path);
+            if (routeCallback != routesEnd)
             {
                 Response* response = routeCallback->second(client);
 
@@ -216,8 +221,17 @@ struct HttpServerPimpl
 
                     delete response; response = nullptr;
                 }
+
+                return true;
             }
-            else if (callback != controllersEnd)
+
+            return false;
+        }
+
+        bool checkController(HttpClient* client)
+        {
+            std::unordered_map<std::string, std::shared_ptr<Controller>>::const_iterator callback = controllers.find(client->Path);
+            if (callback != controllersEnd)
             {
                 Controller* controller = callback->second.get();
                 Controller* newController = controller->Create();
@@ -232,9 +246,22 @@ struct HttpServerPimpl
                     client->ResponseBuffer << "{\"Status\":true,\"Message\":\"" << newController->GetControllerName() << "\"}";
 
                 delete newController; newController = nullptr;
+                return true;
             }
-            else
-                client->ResponseBuffer << "{\"Status\":false,\"Message\":\"Page not found\"}";
+
+            return false;
+        }
+
+        void parseRequest(HttpClient* client)
+        {
+            bool requestExecuted = checkStaticFiles(client) || checkRoutes(client) || checkController(client);
+
+            if (!requestExecuted)
+            {
+                client->ResponseBuffer << "Page not found";
+                client->ContentType = ContentTypes["html"];
+                client->Type = HttpResponseType::_404;
+            }
 
             client->Send();
         }
@@ -505,7 +532,6 @@ void HttpServer::AddStaticFolder(std::string const & pFolderName, std::string co
     {
         tmpPimpl->staticFiles["/" + scanner->VirtualPath + file] = scanner->StartPath + file;
         tmpPimpl->staticFilesEnd = tmpPimpl->staticFiles.cend();
-        //std::cout << "File : " << "/" + scanner->VirtualPath + file << " " << scanner->StartPath + file << std::endl;
     };
     lister->Start();
 

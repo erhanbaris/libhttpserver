@@ -71,6 +71,7 @@ int main(int argc, char *argv[])
     INFO << "Http Server Port : " << HTTP_PORT << std::endl;
     //server.AddMiddleware(testMiddleware);
     server.AddStaticFolder("/Users/erhanbaris/ClionProjects/RemoteServer/webcontent", "static");
+    server.AddStaticFolder("/Volumes/BOOTCAMP/", "film");
     server.Start(HTTP_PORT);
 
     return 0;

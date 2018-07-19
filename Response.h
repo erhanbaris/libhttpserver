@@ -696,6 +696,7 @@ static std::map<std::string, std::string> ContentTypes =
     {"css","text/css"},
     {"csv","text/csv"},
     {"html","text/html"},
+    {"htm","text/html"},
     {"n3","text/n3"},
     {"txt","text/plain"},
     {"dsc","text/prs.lines.tag"},
